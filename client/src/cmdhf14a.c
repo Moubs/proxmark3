@@ -4337,6 +4337,7 @@ int CmdHF14AAIDSim(const char *Cmd) {
                   "hf 14a simaid -t 3 --aid a000000000000000000000 --selectaid_response 9000 --getdata_response 9000  -> Custom AID and responses\n"
                   "hf 14a simaid -t 3 --ats 0578817222 --selectaid_response 01009000 --getdata_response 86009000      -> Custom ATS and responses\n"
                   "hf 14a simaid -t 3 --ats 0578817222 -x                                                             -> Enumerate AID Values\n"
+                  "hf 14a simaid -t 3 --ats 0578817222 -w 04010132001805 -s 04010102001805 -b 20643130302723          -> Custom Hardware, Software and Batch Info\n"
                  );
 
     void *argtable[] = {
@@ -4348,6 +4349,9 @@ int CmdHF14AAIDSim(const char *Cmd) {
         arg_str0("e", "selectaid_response", "<hex>", "<0-100> hex bytes for APDU Response to AID Select (Default: 9000)"),
         arg_str0("p", "getdata_response", "<hex>", "<0-100> hex bytes for APDU Response to Get Data request after AID (Default: 9000)"),
         arg_lit0("x", "enumerate", "Enumerate all AID values via returning Not Found and print them to console "),
+        arg_str0("w", "hardware_info","<hex>", "<7> hex bytes hardware info (Default: 01010101010101)"),
+        arg_str0("s", "software_info","<hex>", "<7> hex bytes software info (Default: 01010101010101)"),
+        arg_str0("b", "batch_info","<hex>", "<7> hex bytes batch info (Default: 01010101010101)"),
         arg_param_end
     };
     CLIExecWithReturn(ctx, Cmd, argtable, false);
@@ -4357,6 +4361,9 @@ int CmdHF14AAIDSim(const char *Cmd) {
     int aid_len = 0;
     int selectaid_response_len = 0;
     int getdata_response_len = 0;
+    int hardware_info_len = 0;
+    int software_info_len = 0;
+    int batch_info_len = 0;
 
     uint8_t uid[10] = {0};
     uint8_t ats[20] = {0};
@@ -4366,6 +4373,9 @@ int CmdHF14AAIDSim(const char *Cmd) {
     uint8_t default_selectaid_response_len = 2;
     uint8_t getdata_response[100] = {0x90, 0x00};
     uint8_t default_getdata_response_len = 2;
+    uint8_t hardware_info[7] = {0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    uint8_t software_info[7] = {0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    uint8_t batch_info[7] = {0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
 
     int tagtype = arg_get_int_def(ctx, 1, 1);
     CLIGetHexWithReturn(ctx, 2, uid, &uid_len);
@@ -4374,6 +4384,9 @@ int CmdHF14AAIDSim(const char *Cmd) {
     CLIGetHexWithReturn(ctx, 5, selectaid_response, &selectaid_response_len);
     CLIGetHexWithReturn(ctx, 6, getdata_response, &getdata_response_len);
     bool enumerate = arg_get_lit(ctx, 7);
+    CLIGetHexWithReturn(ctx, 8, hardware_info, &hardware_info_len);
+    CLIGetHexWithReturn(ctx, 9, software_info, &software_info_len);
+    CLIGetHexWithReturn(ctx, 10, batch_info, &batch_info_len);
     CLIParserFree(ctx);
 
     // default value fill for the AID, selectaid_response, and getdata_response
@@ -4438,6 +4451,21 @@ int CmdHF14AAIDSim(const char *Cmd) {
         FLAG_SET_UID_IN_EMUL(flags);
     }
 
+    if (hardware_info_len > sizeof(hardware_info)) {
+        PrintAndLogEx(ERR, "Provided hardware info too long");
+        return PM3_EINVARG;
+    }
+
+    if (software_info_len > sizeof(software_info)) {
+        PrintAndLogEx(ERR, "Provided software info too long");
+        return PM3_EINVARG;
+    }
+
+    if (batch_info_len > sizeof(batch_info)) {
+        PrintAndLogEx(ERR, "Provided batch info too long");
+        return PM3_EINVARG;
+    }
+
     struct {
         uint8_t tagtype;
         uint16_t flags;
@@ -4446,10 +4474,16 @@ int CmdHF14AAIDSim(const char *Cmd) {
         uint8_t aid[30];
         uint8_t selectaid_response[100];
         uint8_t getdata_response[100];
+        uint8_t hardware_info[7];
+        uint8_t software_info[7];
+        uint8_t batch_info[7];
         uint32_t ats_len;
         uint32_t aid_len;
         uint32_t selectaid_response_len;
         uint32_t getdata_response_len;
+        uint32_t hardware_info_len;
+        uint32_t software_info_len;
+        uint32_t batch_info_len;
     } PACKED payload;
 
     payload.tagtype = tagtype;
@@ -4461,12 +4495,18 @@ int CmdHF14AAIDSim(const char *Cmd) {
     memcpy(payload.aid, aid, aid_len);
     memcpy(payload.selectaid_response, selectaid_response, selectaid_response_len);
     memcpy(payload.getdata_response, getdata_response, getdata_response_len);
+    memcpy(payload.hardware_info, hardware_info, hardware_info_len);
+    memcpy(payload.software_info, software_info, software_info_len);
+    memcpy(payload.batch_info, batch_info, batch_info_len);
 
     // copy the lengths data to the payload
     payload.ats_len = ats_len;
     payload.aid_len = aid_len;
     payload.selectaid_response_len = selectaid_response_len;
     payload.getdata_response_len = getdata_response_len;
+    payload.hardware_info_len = hardware_info_len;
+    payload.software_info_len = software_info_len;
+    payload.batch_info_len = batch_info_len;
 
     clearCommandBuffer();
     SendCommandNG(CMD_HF_ISO14443A_SIM_AID, (uint8_t *)&payload, sizeof(payload));

@@ -152,7 +152,10 @@ void SimulateIso14443aTagEx(uint8_t tagType, uint16_t flags, uint8_t *useruid, u
 void SimulateIso14443aTagAID(uint8_t tagType, uint16_t flags, uint8_t *uid,
                              uint8_t *ats, size_t ats_len,  uint8_t *aid, size_t aid_len,
                              uint8_t *selectaid_response, size_t selectaid_response_len,
-                             uint8_t *getdata_response, size_t getdata_response_len);
+                             uint8_t *getdata_response, size_t getdata_response_len,
+                             uint8_t *hardware_info, size_t hardware_info_len,
+                             uint8_t *software_info, size_t software_info_len,
+                             uint8_t *batch_info, size_t batch_info_len);
 
 bool SimulateIso14443aInit(uint8_t tagType, uint16_t flags, uint8_t *data,
                            uint8_t *ats, size_t ats_len, tag_response_info_t **responses,

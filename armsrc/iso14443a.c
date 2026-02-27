@@ -4450,7 +4450,10 @@ This was forked from the original function to allow for more flexibility in the 
 void SimulateIso14443aTagAID(uint8_t tagType, uint16_t flags, uint8_t *uid,
                              uint8_t *ats, size_t ats_len,  uint8_t *aid, size_t aid_len,
                              uint8_t *selectaid_response, size_t selectaid_response_len,
-                             uint8_t *getdata_response, size_t getdata_response_len) {
+                             uint8_t *getdata_response, size_t getdata_response_len,
+                             uint8_t *hardware_info, size_t hardware_info_len,
+                             uint8_t *software_info, size_t software_info_len,
+                             uint8_t *batch_info, size_t batch_info_len) {
     tag_response_info_t *responses;
     uint32_t cuid = 0;
     uint8_t pages = 0;
@@ -4508,6 +4511,7 @@ void SimulateIso14443aTagAID(uint8_t tagType, uint16_t flags, uint8_t *uid,
     int retval = PM3_SUCCESS;
     int sentCount = 0;
     bool odd_reply = true;
+    int getVersionProcess = 0;
 
     clear_trace();
     set_tracing(true);
@@ -4572,7 +4576,52 @@ void SimulateIso14443aTagAID(uint8_t tagType, uint16_t flags, uint8_t *uid,
                     offset = 1;
                 }
                 case 0x02: // IBlock without CID
-                case 0x03: {
+                case 0x03: { //TODO LOULOU IMPLEMENT LOGIC VERSION_HERE
+                    if (tagType == 3) { // this is only for DESFire
+                         
+                        if (receivedCmd[1] == MFDES_GET_VERSION) { // this is the first part of the GET_VERSION response, which is sent by some readers after receiving the GET_VERSION command (0x60 or 0xAF)
+                            dynamic_response_info.response[0] = 0x02;
+                            dynamic_response_info.response[1] = 0xAF; // the desfire version is sent in three parts.
+                            memcpy(dynamic_response_info.response + 2, hardware_info, 7); // this is hardcoded for now, but we can make it dynamic in the future if needed.
+                            dynamic_response_info.response_n = 9;
+                            getVersionProcess = 1;
+                            break;
+                        } else if (receivedCmd[1] == 0xAF && getVersionProcess == 1 ) { // this is the second part of the GET_VERSION response, which is sent by some readers after receiving the first part (0xAF)
+                            dynamic_response_info.response[0] = 0x03;
+                            dynamic_response_info.response[1] = 0xAF;
+                            memcpy(dynamic_response_info.response + 2, software_info, 7); // this is hardcoded for now, but we can make it dynamic in the future if needed.
+                            dynamic_response_info.response_n = 9;
+                            getVersionProcess = 2;
+                            break;
+                        } else if (receivedCmd[1] == 0xAF && getVersionProcess == 2 ) { // this is the third part of the GET_VERSION response, which is sent by some readers after receiving the first part (0xAF)
+                            dynamic_response_info.response[0] = 0x02;
+                            dynamic_response_info.response[1] = 0x00;
+                            memcpy(dynamic_response_info.response + 2, uid, 7); // we can also return the UID in the version response, since some readers expect that.
+                            dynamic_response_info.response_n = 16;
+                            getVersionProcess = 0;
+                            break;
+                        } else if (receivedCmd[1] == 0x5A ){ // this is when the reader ask a specific APID with 3 Bytes lenght
+                            Dbprintf("Received APDU with 3 byte AID length");
+                            uint8_t *received_aid = &receivedCmd[2]; // TODO the received AID is in little endian, we need to reverse it before comparing it with the AID we have. 
+                            int received_aid_len = 3;
+                            dynamic_response_info.response[0] = receivedCmd[0];
+                            Dbprintf("Received AID (%d):", received_aid_len);
+                            Dbhexdump(received_aid_len, received_aid, false);
+                            if ((received_aid_len == aid_len) && (memcmp(aid, received_aid, aid_len) == 0)) { // Evaluate the AID sent by the Reader to the AID supplied
+                                // AID Response will be parsed here
+                                dynamic_response_info.response[0] = 0x03;
+                                dynamic_response_info.response[1] = 0x00;
+                                dynamic_response_info.response_n = 2;
+                                //memcpy(dynamic_response_info.response + 1, selectaid_response, selectaid_response_len);
+                                //dynamic_response_info.response_n = selectaid_response_len + 1;
+                            } else { // Any other SELECT FILE command will return with a Not Found
+                                dynamic_response_info.response[1] = 0x6A;
+                                dynamic_response_info.response[2] = 0x82;
+                                dynamic_response_info.response_n = 3;
+                            }
+                            break;
+                        }
+                    }
                     dynamic_response_info.response[0] = receivedCmd[0];
                     dynamic_response_info.response[1] = 0x00;
 
